@@ -5,7 +5,6 @@ use std::{
     process::{Child, ChildStdin, ChildStdout, Command, Stdio},
 };
 
-use regex::Regex;
 use rustc_demangle::demangle;
 
 /// Basic interface to demangle function/method names
@@ -69,11 +68,12 @@ impl<'a> Demangler<'a, '_> for CppDemangler {
     }
 }
 
-/// Demangles rustc names, uses [rustc_demangle](https://docs.rs/rustc-demangle/) crate
-pub struct RustDemangler {
-    /// strips crate disambiguators
-    disambiguator: Regex,
-}
+/// Demangles rustc names using [rustc_demangle](https://docs.rs/rustc-demangle/).
+///
+/// Crate disambiguators are retained so separately compiled functions have
+/// distinct identities in Cobertura reports.
+#[non_exhaustive]
+pub struct RustDemangler {}
 impl Default for RustDemangler {
     fn default() -> Self {
         Self::new()
@@ -81,26 +81,15 @@ impl Default for RustDemangler {
 }
 
 impl RustDemangler {
-    /// Creates the Regex instance needed for later demangling.
-    /// # Panics
-    /// When regular expression is invalid.
-    #[allow(
-        clippy::unwrap_used,
-        reason = "regex is known to compile fine, no panic"
-    )]
+    /// Creates a Rust demangler that retains crate disambiguators.
     #[must_use]
     pub fn new() -> Self {
-        Self {
-            disambiguator: Regex::new(r"\[[0-9a-f]{5,16}\]::").unwrap(),
-        }
+        Self {}
     }
 }
 impl<'a> Demangler<'a, '_> for RustDemangler {
     fn demangle(&mut self, ident: &str) -> io::Result<Cow<'a, str>> {
-        let demangled = demangle(ident).to_string();
-        Ok(Cow::Owned(
-            self.disambiguator.replace_all(&demangled, "::").to_string(),
-        ))
+        Ok(Cow::Owned(demangle(ident).to_string()))
     }
 
     fn stop(self) -> io::Result<()> {

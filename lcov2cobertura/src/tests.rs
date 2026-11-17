@@ -186,6 +186,52 @@ fn test_demangle() {
 }
 
 #[test]
+fn test_rust_crate_disambiguators_remain_distinct() {
+    use std::collections::BTreeMap;
+
+    let uncovered = "_RNvCsa000000_4demo1f";
+    let covered = "_RNvCsb000000_4demo1f";
+    let lcov = format!(
+        "SF:demo/lib.rs\nFN:1,{uncovered}\nFN:1,{covered}\nFNDA:0,{uncovered}\nFNDA:7,{covered}\nDA:1,7\nend_of_record\n"
+    );
+    let coverage = parse_lines(lcov.as_bytes().lines(), ".", &[]).unwrap();
+    let xml = coverage_to_string(&coverage, 0, demangle::RustDemangler::default()).unwrap();
+    let method = regex::Regex::new(
+        r#"(?s)<method name="([^"]*)" signature="([^"]*)"[^>]*>\s*<lines>\s*<line hits="(\d+)""#,
+    )
+    .unwrap();
+    let methods: BTreeMap<_, _> = method
+        .captures_iter(&xml)
+        .map(|capture| {
+            (
+                (capture[1].to_owned(), capture[2].to_owned()),
+                capture[3].parse::<u64>().unwrap(),
+            )
+        })
+        .collect();
+
+    assert_eq!(methods.len(), 2);
+    assert!(methods.keys().all(|(name, signature)| {
+        name.starts_with("demo[") && name.ends_with("]::f") && signature.is_empty()
+    }));
+    let expected = BTreeMap::from([
+        (
+            (
+                rustc_demangle::demangle(uncovered).to_string(),
+                String::new(),
+            ),
+            0,
+        ),
+        (
+            (rustc_demangle::demangle(covered).to_string(), String::new()),
+            7,
+        ),
+    ]);
+    assert_eq!(methods, expected);
+    assert!(xml.contains("lines-covered=\"1\" lines-valid=\"1\""));
+}
+
+#[test]
 fn test_demangle_rust() {
     let lcov = "TN:\nSF:foo/foo.cpp\nFN:3,_RNvC6_123foo3bar\nFNDA:1,_RINbNbCskIICzLVDPPb_5alloc5alloc8box_freeDINbNiB4_5boxed5FnBoxuEp6OutputuEL_ECs1iopQbuBiw2_3std\nFN:8,_RC3foo.llvm.9D1C9369\nFNDA:1,_RC3foo.llvm.9D1C9369\nDA:3,1\nDA:5,1\nDA:8,1\nDA:10,1\nend_of_record";
     let demangler = demangle::RustDemangler::new();
@@ -207,7 +253,7 @@ fn test_demangle_rust() {
                                 <line hits="1" number="8" branch="false"/>
                             </lines>
                         </method>
-                        <method name="alloc::alloc::box_free::&lt;dyn alloc::boxed::FnBox&lt;(), Output = ()&gt;&gt;" signature="" complexity="0" line-rate="1" branch-rate="1">
+                        <method name="alloc[f15a878b47eb696b]::alloc::box_free::&lt;dyn alloc[f15a878b47eb696b]::boxed::FnBox&lt;(), Output = ()&gt;&gt;" signature="" complexity="0" line-rate="1" branch-rate="1">
                             <lines>
                                 <line hits="1" number="0" branch="false"/>
                             </lines>
